@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.api.routes import auth, models, prompts
 from app.api.routes import users, thresholds, notifications, data, analysis, audit, collapse_events, rules, backup
@@ -12,6 +13,14 @@ app = FastAPI(
     description="API for detecting collapse of large language models",
     debug=settings.DEBUG
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{exc.__class__.__name__}: {exc}"},
+    )
 
 
 @app.middleware("http")

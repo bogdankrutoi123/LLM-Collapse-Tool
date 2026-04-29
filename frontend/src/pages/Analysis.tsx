@@ -11,6 +11,7 @@ type TrendRow = {
   label: string;
   entropy: number | null;
   kl: number | null;
+  js: number | null;
 };
 
 type ComparisonRow = {
@@ -92,6 +93,7 @@ export default function Analysis() {
   const [windowDays, setWindowDays] = useState<"all" | "7" | "30">("all");
   const [showEntropy, setShowEntropy] = useState(true);
   const [showKl, setShowKl] = useState(true);
+  const [showJs, setShowJs] = useState(true);
   const [isTrendLoading, setIsTrendLoading] = useState(false);
   const [isComparisonLoading, setIsComparisonLoading] = useState(false);
 
@@ -108,24 +110,21 @@ export default function Analysis() {
   }, []);
 
   useEffect(() => {
+    setVersionA("");
+    setVersionB("");
+    setModelVersionId("");
+    setComparison(null);
     if (!selectedModelId) {
       setCompareVersions([]);
-      setVersionA("");
-      setVersionB("");
-      setModelVersionId("");
       return;
     }
     apiFetch<ModelVersion[]>(`/api/v1/models/${selectedModelId}/versions`)
       .then((data) => {
         setCompareVersions(data);
         if (data.length > 0) {
-          setVersionA((prev) => prev || String(data[0].id));
-          setVersionB((prev) => prev || String(data[Math.min(1, data.length - 1)].id));
-          setModelVersionId((prev) => prev || String(data[0].id));
-        } else {
-          setVersionA("");
-          setVersionB("");
-          setModelVersionId("");
+          setVersionA(String(data[0].id));
+          setVersionB(String(data[Math.min(1, data.length - 1)].id));
+          setModelVersionId(String(data[0].id));
         }
       })
       .catch((error: unknown) => setError(getErrorMessage(error)));
@@ -176,33 +175,44 @@ export default function Analysis() {
   };
 
   const exportReport = async (format: "json" | "csv") => {
+    setError(null);
     if (!versionA || !versionB) {
       setError("Select both versions to export a report.");
       return;
     }
-    const res = await apiDownload("/api/v1/analysis/report", {
-      method: "POST",
-      body: JSON.stringify({
-        version_id_1: Number(versionA),
-        version_id_2: Number(versionB),
-        format
-      })
-    });
-    const url = window.URL.createObjectURL(res);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `comparison_report.${format}`;
-    link.click();
+    try {
+      const res = await apiDownload("/api/v1/analysis/report", {
+        method: "POST",
+        body: JSON.stringify({
+          version_id_1: Number(versionA),
+          version_id_2: Number(versionB),
+          format,
+        }),
+      });
+      const url = window.URL.createObjectURL(res);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `comparison_report.${format}`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error: unknown) {
+      setError(getErrorMessage(error));
+    }
   };
 
   const exportPng = async () => {
+    setError(null);
     if (!chartRef.current) return;
-    const canvas = await html2canvas(chartRef.current);
-    const url = canvas.toDataURL("image/png");
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "charts.png";
-    link.click();
+    try {
+      const canvas = await html2canvas(chartRef.current);
+      const url = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "charts.png";
+      link.click();
+    } catch (error: unknown) {
+      setError(getErrorMessage(error));
+    }
   };
 
   const comparisonRows = parseComparisonRows(comparison);
@@ -221,17 +231,23 @@ export default function Analysis() {
       return now - rowTime <= cutoffMs;
     });
 
-    return filtered.map((row) => ({
-      label: new Date(row.period_start).toLocaleString(),
-      entropy: row.avg_entropy ?? null,
-      kl: row.avg_kl_divergence ?? null,
-    }));
+    return filtered.map((row) => {
+      const benchmark = (row.metrics_data as { benchmark?: { js_divergence?: number | null } } | null | undefined)?.benchmark;
+      const js = typeof benchmark?.js_divergence === "number" ? benchmark.js_divergence : null;
+      return {
+        label: new Date(row.period_start).toLocaleString(),
+        entropy: row.avg_entropy ?? null,
+        kl: row.avg_kl_divergence ?? null,
+        js,
+      };
+    });
   }, [aggregatedRaw, windowDays]);
 
   const trendQuality = useMemo(() => {
     const points = aggregated.length;
     const missingEntropy = aggregated.filter((row) => row.entropy === null).length;
     const missingKl = aggregated.filter((row) => row.kl === null).length;
+    const missingJs = aggregated.filter((row) => row.js === null).length;
     const warnings: string[] = [];
 
     if (points > 0 && points < 5) {
@@ -240,8 +256,13 @@ export default function Analysis() {
     if (missingEntropy > 0) {
       warnings.push(`Entropy is missing in ${missingEntropy} points.`);
     }
-    if (missingKl > 0) {
+    if (missingKl === points && points > 0) {
+      warnings.push("No KL divergence data — only available from per-prompt metrics, not from benchmark snapshots.");
+    } else if (missingKl > 0) {
       warnings.push(`KL divergence is missing in ${missingKl} points.`);
+    }
+    if (missingJs > 0 && missingJs < points) {
+      warnings.push(`JS divergence is missing in ${missingJs} points.`);
     }
 
     return warnings;
@@ -340,6 +361,10 @@ export default function Analysis() {
             <input type="checkbox" checked={showKl} onChange={(event) => setShowKl(event.target.checked)} />
             Show KL
           </label>
+          <label className="small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={showJs} onChange={(event) => setShowJs(event.target.checked)} />
+            Show JS
+          </label>
         </div>
         {isTrendLoading && <p className="small">Loading trend data...</p>}
         {!isTrendLoading && aggregated.length === 0 && (
@@ -378,7 +403,19 @@ export default function Analysis() {
                 </BarChart>
               </ResponsiveContainer>
             )}
-            {!showEntropy && !showKl && <p className="small">Select at least one metric to display chart.</p>}
+            {showJs && (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={aggregated}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis label={{ value: "JS Divergence", angle: -90, position: "insideLeft" }} />
+                  <Tooltip formatter={(value: number | null) => formatMetric(value)} />
+                  <Legend />
+                  <Bar dataKey="js" name="JS Divergence" fill="#f59e0b" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+            {!showEntropy && !showKl && !showJs && <p className="small">Select at least one metric to display chart.</p>}
           </>
         )}
       </div>

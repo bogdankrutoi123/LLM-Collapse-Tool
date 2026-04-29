@@ -206,14 +206,14 @@ def get_wikitext_benchmark(
         model_version_id=model_version_id,
         period_start=now,
         period_end=now,
-        total_prompts=result.prompts_used,
-        avg_entropy=result.entropy,
-        avg_kl_divergence=result.js_divergence,
+        total_prompts=result["prompts_used"],
+        avg_entropy=result["entropy"],
+        avg_kl_divergence=None,
         avg_generation_time=None,
         avg_output_length=None,
         anomaly_count=0,
         anomaly_percentage=0.0,
-        metrics_data={"benchmark": result.model_dump()},
+        metrics_data={"benchmark": result},
     )
     db.add(snapshot)
     db.commit()
