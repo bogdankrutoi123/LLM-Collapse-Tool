@@ -138,6 +138,10 @@ def stub_hf_loader(monkeypatch):
 
     monkeypatch.setattr("app.services.wikitext_service._load_model_and_tokenizer", _fake_loader)
     monkeypatch.setattr("app.api.routes.prompts._load_model_and_tokenizer", _fake_loader)
+    monkeypatch.setattr(
+        "app.services.model_service.ModelVersionService.validate_model_runtime_compatibility",
+        staticmethod(lambda *args, **kwargs: None),
+    )
     yield
 
 

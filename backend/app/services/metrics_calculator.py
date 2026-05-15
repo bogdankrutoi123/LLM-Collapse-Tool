@@ -168,8 +168,8 @@ class MetricsCalculator:
             result.append({
                 "position": idx,
                 "token": token,
-                "is_new": is_new,
-                "is_rare": is_rare
+                "is_new": bool(is_new),
+                "is_rare": bool(is_rare),
             })
 
         return result

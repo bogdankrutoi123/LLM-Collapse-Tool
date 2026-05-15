@@ -15,6 +15,10 @@ class AuditService:
             return {key: AuditService._json_safe(val) for key, val in value.items()}
         if isinstance(value, list):
             return [AuditService._json_safe(item) for item in value]
+        # drop SQLAlchemy ORM instances (e.g. lazily-loaded relationships)
+        # so the audit write doesn't blow up on non-serializable values
+        if hasattr(value, "_sa_instance_state"):
+            return None
         return value
 
     @staticmethod

@@ -1,11 +1,7 @@
 * text=auto eol=lf
-
-# Keep Windows scripts with CRLF when added later
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
-
-# Binary assets
 *.png binary
 *.jpg binary
 *.jpeg binary
@@ -16,3 +12,4 @@
 *.woff binary
 *.woff2 binary
 *.ttf binary
+notebooks/collapse_models.zip filter=lfs diff=lfs merge=lfs -text

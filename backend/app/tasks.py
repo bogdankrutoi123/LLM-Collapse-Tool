@@ -2,6 +2,7 @@ from celery import Celery
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.services.evaluation_service import EvaluationService
+from app.services.benchmark_job_service import BenchmarkJobService
 
 settings = get_settings()
 
@@ -18,5 +19,15 @@ def run_evaluation_job(job_id: int):
     db = SessionLocal()
     try:
         EvaluationService.run_job(db, job_id)
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.tasks.run_benchmark_job")
+def run_benchmark_job(job_id: int):
+    """Execute a WikiText / custom dataset benchmark in the background."""
+    db = SessionLocal()
+    try:
+        BenchmarkJobService.execute_job(db, job_id)
     finally:
         db.close()

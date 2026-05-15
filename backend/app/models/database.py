@@ -38,6 +38,14 @@ class EvaluationJobStatus(str, enum.Enum):
     PARTIAL = "partial"
 
 
+class BenchmarkJobStatus(str, enum.Enum):
+    """Benchmark job lifecycle status."""
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class User(Base):
     """User model."""
     __tablename__ = "users"
@@ -237,6 +245,35 @@ class EvaluationItem(Base):
 
     job = relationship("EvaluationJob", back_populates="items")
     prompt_set_item = relationship("PromptSetItem", back_populates="evaluation_items")
+
+
+class BenchmarkJob(Base):
+    """Asynchronous WikiText / custom dataset benchmark job."""
+    __tablename__ = "benchmark_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    model_version_id = Column(Integer, ForeignKey("model_versions.id", ondelete="CASCADE"), nullable=False)
+    created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+
+    status = Column(SQLEnum(BenchmarkJobStatus), default=BenchmarkJobStatus.QUEUED, nullable=False)
+    error_message = Column(Text)
+
+    dataset_id = Column(String(255), nullable=False)
+    sample_count = Column(Integer, nullable=False)
+    max_new_tokens = Column(Integer, nullable=False)
+    temperature = Column(Float, nullable=False)
+    num_beams = Column(Integer, nullable=False)
+    max_tokens = Column(Integer, nullable=False)
+    top_k = Column(Integer, nullable=False)
+    rare_percentile = Column(Float, nullable=False)
+    seed = Column(Integer)
+
+    result = Column(JSON)
+    aggregated_metric_id = Column(Integer, ForeignKey("aggregated_metrics.id", ondelete="SET NULL"))
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
 
 
 class AggregatedMetric(Base):

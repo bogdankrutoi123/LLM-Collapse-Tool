@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, AliasChoices
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from app.models.database import UserRole, ModelStatus, NotificationStatus, EvaluationJobStatus
+from app.models.database import UserRole, ModelStatus, NotificationStatus, EvaluationJobStatus, BenchmarkJobStatus
 
 
 class UserBase(BaseModel):
@@ -179,6 +179,14 @@ class PromptResponseUpdate(BaseModel):
     embeddings: Optional[List] = None
 
 
+class PromptUpdate(BaseModel):
+    input_text: Optional[str] = None
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    top_k: Optional[int] = Field(None, ge=1)
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0)
+    max_new_tokens: Optional[int] = Field(None, ge=1)
+
+
 class BatchPromptCreate(BaseModel):
     prompts: List[PromptCreate] = Field(..., max_length=100)
 
@@ -335,6 +343,43 @@ class WikiTextBenchmarkResponse(WikiTextMetricsResponse):
     reference_entropy: Optional[float] = None
     reference_perplexity: Optional[float] = None
     js_divergence: Optional[float] = None
+
+
+class BenchmarkJobCreate(BaseModel):
+    model_version_id: int
+    dataset_id: str = "wikitext-2"
+    sample_count: int = Field(8, ge=1, le=200)
+    max_new_tokens: int = Field(32, ge=1, le=512)
+    temperature: float = Field(0.7, ge=0.0, le=2.0)
+    num_beams: int = Field(1, ge=1, le=10)
+    max_tokens: int = Field(8000, ge=1000, le=200000)
+    top_k: int = Field(20, ge=5, le=100)
+    rare_percentile: float = Field(0.1, gt=0.0, lt=1.0)
+    seed: Optional[int] = None
+
+
+class BenchmarkJobResponse(BaseModel):
+    id: int
+    model_version_id: int
+    created_by_id: Optional[int] = None
+    status: BenchmarkJobStatus
+    error_message: Optional[str] = None
+    dataset_id: str
+    sample_count: int
+    max_new_tokens: int
+    temperature: float
+    num_beams: int
+    max_tokens: int
+    top_k: int
+    rare_percentile: float
+    seed: Optional[int] = None
+    result: Optional[dict] = None
+    aggregated_metric_id: Optional[int] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AlertThresholdBase(BaseModel):

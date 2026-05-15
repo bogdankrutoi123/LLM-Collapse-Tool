@@ -37,8 +37,8 @@ def test_js_divergence_bounded_in_zero_to_one():
 
 def test_token_frequency_counts_repeats():
     freq = MetricsCalculator.calculate_token_frequency(["a", "b", "a", "c", "a"])
-    assert freq["a"] == 3
-    assert freq["b"] == 1
+    assert freq["a"] == pytest.approx(3 / 5)
+    assert freq["b"] == pytest.approx(1 / 5)
 
 
 def test_length_statistics_handles_empty():

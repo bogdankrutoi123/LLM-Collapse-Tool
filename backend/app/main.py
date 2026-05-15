@@ -17,20 +17,17 @@ app = FastAPI(
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    try:
+        detail = f"{exc.__class__.__name__}: {exc}"
+    except Exception:
+        detail = exc.__class__.__name__
     return JSONResponse(
         status_code=500,
-        content={"detail": f"{exc.__class__.__name__}: {exc}"},
+        content={"detail": detail},
     )
 
 
-@app.middleware("http")
-async def enforce_https(request: Request, call_next):
-    if settings.ENFORCE_HTTPS:
-        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-        if proto != "https":
-            raise HTTPException(status_code=403, detail="HTTPS is required")
-    return await call_next(request)
-
+# CORS goes outermost so error responses still carry the headers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
@@ -38,6 +35,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# plain Starlette middleware (not BaseHTTPMiddleware) avoids the exception
+# propagation bug that can strip CORS headers from error responses
+from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
+
+
+class EnforceHttpsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if settings.ENFORCE_HTTPS:
+            proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+            if proto != "https":
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "HTTPS is required"},
+                )
+        try:
+            return await call_next(request)
+        except Exception as exc:
+            try:
+                detail = f"{exc.__class__.__name__}: {exc}"
+            except Exception:
+                detail = exc.__class__.__name__
+            return JSONResponse(status_code=500, content={"detail": detail})
+
+
+app.add_middleware(EnforceHttpsMiddleware)
 
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(models.router, prefix=settings.API_V1_PREFIX)

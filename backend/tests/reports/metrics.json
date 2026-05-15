@@ -1,0 +1,837 @@
+{
+  "session_seconds": 134.653,
+  "total_requests": 649,
+  "total_5xx": 1,
+  "error_rate": 0.0015,
+  "throughput_rps": 4.82,
+  "endpoints": {
+    "POST /api/v1/auth/login": {
+      "n": 117,
+      "mean_ms": 346.048,
+      "p50_ms": 318.823,
+      "p95_ms": 503.014,
+      "p99_ms": 584.01,
+      "max_ms": 596.14,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/analysis/compare": {
+      "n": 3,
+      "mean_ms": 14.674,
+      "p50_ms": 16.639,
+      "p95_ms": 18.126,
+      "p99_ms": 18.258,
+      "max_ms": 18.291,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/analysis/aggregated": {
+      "n": 1,
+      "mean_ms": 16.392,
+      "p50_ms": 16.392,
+      "p95_ms": 16.392,
+      "p99_ms": 16.392,
+      "max_ms": 16.392,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/analysis/report": {
+      "n": 2,
+      "mean_ms": 25.927,
+      "p50_ms": 25.927,
+      "p95_ms": 35.914,
+      "p99_ms": 36.801,
+      "max_ms": 37.023,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/analysis/aggregate": {
+      "n": 2,
+      "mean_ms": 13.389,
+      "p50_ms": 13.389,
+      "p95_ms": 17.603,
+      "p99_ms": 17.978,
+      "max_ms": 18.071,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/analysis/wikitext/datasets": {
+      "n": 1,
+      "mean_ms": 6.955,
+      "p50_ms": 6.955,
+      "p95_ms": 6.955,
+      "p99_ms": 6.955,
+      "max_ms": 6.955,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/analysis/wikitext/datasets/upload": {
+      "n": 3,
+      "mean_ms": 7.94,
+      "p50_ms": 7.808,
+      "p95_ms": 8.927,
+      "p99_ms": 9.026,
+      "max_ms": 9.051,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/analysis/wikitext/benchmark": {
+      "n": 5,
+      "mean_ms": 8408.226,
+      "p50_ms": 9.197,
+      "p95_ms": 22082.09,
+      "p99_ms": 22653.886,
+      "max_ms": 22796.836,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/analysis/wikitext/benchmark/jobs": {
+      "n": 4,
+      "mean_ms": 11.074,
+      "p50_ms": 8.917,
+      "p95_ms": 19.935,
+      "p99_ms": 21.413,
+      "max_ms": 21.783,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/models/": {
+      "n": 86,
+      "mean_ms": 14.044,
+      "p50_ms": 14.261,
+      "p95_ms": 16.76,
+      "p99_ms": 18.376,
+      "max_ms": 20.125,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/models/1/versions": {
+      "n": 32,
+      "mean_ms": 14.604,
+      "p50_ms": 14.008,
+      "p95_ms": 19.335,
+      "p99_ms": 23.145,
+      "max_ms": 23.881,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/auth/register": {
+      "n": 3,
+      "mean_ms": 285.804,
+      "p50_ms": 387.677,
+      "p95_ms": 455.129,
+      "p99_ms": 461.124,
+      "max_ms": 462.623,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/auth/me": {
+      "n": 103,
+      "mean_ms": 8.528,
+      "p50_ms": 8.3,
+      "p95_ms": 11.162,
+      "p99_ms": 11.754,
+      "max_ms": 11.874,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/auth/refresh": {
+      "n": 2,
+      "mean_ms": 6.678,
+      "p50_ms": 6.678,
+      "p95_ms": 8.478,
+      "p99_ms": 8.638,
+      "max_ms": 8.678,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/auth/logout": {
+      "n": 1,
+      "mean_ms": 4.872,
+      "p50_ms": 4.872,
+      "p95_ms": 4.872,
+      "p99_ms": 4.872,
+      "max_ms": 4.872,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/auth/bootstrap-admin": {
+      "n": 3,
+      "mean_ms": 111.381,
+      "p50_ms": 7.359,
+      "p95_ms": 288.437,
+      "p99_ms": 313.422,
+      "max_ms": 319.668,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/backup/create": {
+      "n": 2,
+      "mean_ms": 19.302,
+      "p50_ms": 19.302,
+      "p95_ms": 24.756,
+      "p99_ms": 25.24,
+      "max_ms": 25.361,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/backup/list": {
+      "n": 1,
+      "mean_ms": 9.065,
+      "p50_ms": 9.065,
+      "p95_ms": 9.065,
+      "p99_ms": 9.065,
+      "max_ms": 9.065,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/backup/restore": {
+      "n": 3,
+      "mean_ms": 11.347,
+      "p50_ms": 10.651,
+      "p95_ms": 15.469,
+      "p99_ms": 15.897,
+      "max_ms": 16.004,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/models/": {
+      "n": 53,
+      "mean_ms": 9.575,
+      "p50_ms": 9.576,
+      "p95_ms": 11.035,
+      "p99_ms": 11.506,
+      "max_ms": 11.574,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/analysis/wikitext/benchmark/jobs/1": {
+      "n": 2,
+      "mean_ms": 7.302,
+      "p50_ms": 7.302,
+      "p95_ms": 7.727,
+      "p99_ms": 7.764,
+      "max_ms": 7.774,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/analysis/wikitext/benchmark/jobs/99999": {
+      "n": 1,
+      "mean_ms": 7.855,
+      "p50_ms": 7.855,
+      "p95_ms": 7.855,
+      "p99_ms": 7.855,
+      "max_ms": 7.855,
+      "errors_5xx": 0
+    },
+    "DELETE /api/v1/analysis/wikitext/benchmark/jobs/1": {
+      "n": 1,
+      "mean_ms": 11.058,
+      "p50_ms": 11.058,
+      "p95_ms": 11.058,
+      "p99_ms": 11.058,
+      "max_ms": 11.058,
+      "errors_5xx": 0
+    },
+    "DELETE /api/v1/analysis/wikitext/benchmark/jobs/99999": {
+      "n": 1,
+      "mean_ms": 7.072,
+      "p50_ms": 7.072,
+      "p95_ms": 7.072,
+      "p99_ms": 7.072,
+      "max_ms": 7.072,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/data/export": {
+      "n": 6,
+      "mean_ms": 27.594,
+      "p50_ms": 21.257,
+      "p95_ms": 64.708,
+      "p99_ms": 74.039,
+      "max_ms": 76.372,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/": {
+      "n": 83,
+      "mean_ms": 13.284,
+      "p50_ms": 13.137,
+      "p95_ms": 14.977,
+      "p99_ms": 19.573,
+      "max_ms": 20.964,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/data/import": {
+      "n": 8,
+      "mean_ms": 13.108,
+      "p50_ms": 9.891,
+      "p95_ms": 30.132,
+      "p99_ms": 37.686,
+      "max_ms": 39.575,
+      "errors_5xx": 0
+    },
+    "GET /": {
+      "n": 2,
+      "mean_ms": 4.225,
+      "p50_ms": 4.225,
+      "p95_ms": 4.324,
+      "p99_ms": 4.333,
+      "max_ms": 4.335,
+      "errors_5xx": 0
+    },
+    "GET /health": {
+      "n": 3,
+      "mean_ms": 4.684,
+      "p50_ms": 4.372,
+      "p95_ms": 5.373,
+      "p99_ms": 5.461,
+      "max_ms": 5.484,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/models/1/versions": {
+      "n": 1,
+      "mean_ms": 10.991,
+      "p50_ms": 10.991,
+      "p95_ms": 10.991,
+      "p99_ms": 10.991,
+      "max_ms": 10.991,
+      "errors_5xx": 0
+    },
+    "DELETE /api/v1/models/1": {
+      "n": 1,
+      "mean_ms": 17.716,
+      "p50_ms": 17.716,
+      "p95_ms": 17.716,
+      "p99_ms": 17.716,
+      "max_ms": 17.716,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/models/9999": {
+      "n": 1,
+      "mean_ms": 14.174,
+      "p50_ms": 14.174,
+      "p95_ms": 14.174,
+      "p99_ms": 14.174,
+      "max_ms": 14.174,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/notifications/": {
+      "n": 1,
+      "mean_ms": 13.128,
+      "p50_ms": 13.128,
+      "p95_ms": 13.128,
+      "p99_ms": 13.128,
+      "max_ms": 13.128,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/notifications/1": {
+      "n": 2,
+      "mean_ms": 19.258,
+      "p50_ms": 19.258,
+      "p95_ms": 23.383,
+      "p99_ms": 23.75,
+      "max_ms": 23.841,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/notifications/9999": {
+      "n": 1,
+      "mean_ms": 8.896,
+      "p50_ms": 8.896,
+      "p95_ms": 8.896,
+      "p99_ms": 8.896,
+      "max_ms": 8.896,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/prompts/count": {
+      "n": 2,
+      "mean_ms": 10.984,
+      "p50_ms": 10.984,
+      "p95_ms": 12.622,
+      "p99_ms": 12.767,
+      "max_ms": 12.804,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/1/generate": {
+      "n": 8,
+      "mean_ms": 38.114,
+      "p50_ms": 20.307,
+      "p95_ms": 120.268,
+      "p99_ms": 160.854,
+      "max_ms": 171.001,
+      "errors_5xx": 1
+    },
+    "POST /api/v1/prompts/2/generate": {
+      "n": 1,
+      "mean_ms": 61.861,
+      "p50_ms": 61.861,
+      "p95_ms": 61.861,
+      "p99_ms": 61.861,
+      "max_ms": 61.861,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/3/generate": {
+      "n": 1,
+      "mean_ms": 62.073,
+      "p50_ms": 62.073,
+      "p95_ms": 62.073,
+      "p99_ms": 62.073,
+      "max_ms": 62.073,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/4/generate": {
+      "n": 1,
+      "mean_ms": 56.128,
+      "p50_ms": 56.128,
+      "p95_ms": 56.128,
+      "p99_ms": 56.128,
+      "max_ms": 56.128,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/5/generate": {
+      "n": 1,
+      "mean_ms": 65.5,
+      "p50_ms": 65.5,
+      "p95_ms": 65.5,
+      "p99_ms": 65.5,
+      "max_ms": 65.5,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/6/generate": {
+      "n": 1,
+      "mean_ms": 66.867,
+      "p50_ms": 66.867,
+      "p95_ms": 66.867,
+      "p99_ms": 66.867,
+      "max_ms": 66.867,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/7/generate": {
+      "n": 1,
+      "mean_ms": 56.062,
+      "p50_ms": 56.062,
+      "p95_ms": 56.062,
+      "p99_ms": 56.062,
+      "max_ms": 56.062,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/8/generate": {
+      "n": 1,
+      "mean_ms": 57.056,
+      "p50_ms": 57.056,
+      "p95_ms": 57.056,
+      "p99_ms": 57.056,
+      "max_ms": 57.056,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/9/generate": {
+      "n": 1,
+      "mean_ms": 59.278,
+      "p50_ms": 59.278,
+      "p95_ms": 59.278,
+      "p99_ms": 59.278,
+      "max_ms": 59.278,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/10/generate": {
+      "n": 1,
+      "mean_ms": 59.948,
+      "p50_ms": 59.948,
+      "p95_ms": 59.948,
+      "p99_ms": 59.948,
+      "max_ms": 59.948,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/11/generate": {
+      "n": 1,
+      "mean_ms": 61.144,
+      "p50_ms": 61.144,
+      "p95_ms": 61.144,
+      "p99_ms": 61.144,
+      "max_ms": 61.144,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/12/generate": {
+      "n": 1,
+      "mean_ms": 68.844,
+      "p50_ms": 68.844,
+      "p95_ms": 68.844,
+      "p99_ms": 68.844,
+      "max_ms": 68.844,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/13/generate": {
+      "n": 1,
+      "mean_ms": 65.621,
+      "p50_ms": 65.621,
+      "p95_ms": 65.621,
+      "p99_ms": 65.621,
+      "max_ms": 65.621,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/14/generate": {
+      "n": 1,
+      "mean_ms": 62.939,
+      "p50_ms": 62.939,
+      "p95_ms": 62.939,
+      "p99_ms": 62.939,
+      "max_ms": 62.939,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/15/generate": {
+      "n": 1,
+      "mean_ms": 67.224,
+      "p50_ms": 67.224,
+      "p95_ms": 67.224,
+      "p99_ms": 67.224,
+      "max_ms": 67.224,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/16/generate": {
+      "n": 1,
+      "mean_ms": 69.389,
+      "p50_ms": 69.389,
+      "p95_ms": 69.389,
+      "p99_ms": 69.389,
+      "max_ms": 69.389,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/17/generate": {
+      "n": 1,
+      "mean_ms": 68.262,
+      "p50_ms": 68.262,
+      "p95_ms": 68.262,
+      "p99_ms": 68.262,
+      "max_ms": 68.262,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/18/generate": {
+      "n": 1,
+      "mean_ms": 69.891,
+      "p50_ms": 69.891,
+      "p95_ms": 69.891,
+      "p99_ms": 69.891,
+      "max_ms": 69.891,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/19/generate": {
+      "n": 1,
+      "mean_ms": 75.085,
+      "p50_ms": 75.085,
+      "p95_ms": 75.085,
+      "p99_ms": 75.085,
+      "max_ms": 75.085,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/20/generate": {
+      "n": 1,
+      "mean_ms": 67.31,
+      "p50_ms": 67.31,
+      "p95_ms": 67.31,
+      "p99_ms": 67.31,
+      "max_ms": 67.31,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/prompts/1": {
+      "n": 2,
+      "mean_ms": 8.845,
+      "p50_ms": 8.845,
+      "p95_ms": 8.888,
+      "p99_ms": 8.892,
+      "max_ms": 8.893,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/999/generate": {
+      "n": 1,
+      "mean_ms": 8.706,
+      "p50_ms": 8.706,
+      "p95_ms": 8.706,
+      "p99_ms": 8.706,
+      "max_ms": 8.706,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/prompts/1/response": {
+      "n": 2,
+      "mean_ms": 18.025,
+      "p50_ms": 18.025,
+      "p95_ms": 19.428,
+      "p99_ms": 19.553,
+      "max_ms": 19.584,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/prompts/": {
+      "n": 2,
+      "mean_ms": 9.22,
+      "p50_ms": 9.22,
+      "p95_ms": 11.231,
+      "p99_ms": 11.41,
+      "max_ms": 11.454,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/prompts/9999": {
+      "n": 1,
+      "mean_ms": 13.696,
+      "p50_ms": 13.696,
+      "p95_ms": 13.696,
+      "p99_ms": 13.696,
+      "max_ms": 13.696,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/models/2/versions": {
+      "n": 1,
+      "mean_ms": 15.168,
+      "p50_ms": 15.168,
+      "p95_ms": 15.168,
+      "p99_ms": 15.168,
+      "max_ms": 15.168,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/prompts/1": {
+      "n": 4,
+      "mean_ms": 12.144,
+      "p50_ms": 11.736,
+      "p95_ms": 16.064,
+      "p99_ms": 16.374,
+      "max_ms": 16.451,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/prompts/9999": {
+      "n": 1,
+      "mean_ms": 8.834,
+      "p50_ms": 8.834,
+      "p95_ms": 8.834,
+      "p99_ms": 8.834,
+      "max_ms": 8.834,
+      "errors_5xx": 0
+    },
+    "DELETE /api/v1/prompts/1": {
+      "n": 1,
+      "mean_ms": 13.485,
+      "p50_ms": 13.485,
+      "p95_ms": 13.485,
+      "p99_ms": 13.485,
+      "max_ms": 13.485,
+      "errors_5xx": 0
+    },
+    "DELETE /api/v1/prompts/9999": {
+      "n": 1,
+      "mean_ms": 8.522,
+      "p50_ms": 8.522,
+      "p95_ms": 8.522,
+      "p99_ms": 8.522,
+      "max_ms": 8.522,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/batch": {
+      "n": 2,
+      "mean_ms": 14.569,
+      "p50_ms": 14.569,
+      "p95_ms": 20.37,
+      "p99_ms": 20.886,
+      "max_ms": 21.015,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/1/metrics": {
+      "n": 5,
+      "mean_ms": 19.851,
+      "p50_ms": 19.739,
+      "p95_ms": 23.841,
+      "p99_ms": 23.975,
+      "max_ms": 24.008,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/prompts/9999/metrics": {
+      "n": 1,
+      "mean_ms": 8.023,
+      "p50_ms": 8.023,
+      "p95_ms": 8.023,
+      "p99_ms": 8.023,
+      "max_ms": 8.023,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/prompts/1/metrics": {
+      "n": 2,
+      "mean_ms": 9.422,
+      "p50_ms": 9.422,
+      "p95_ms": 10.027,
+      "p99_ms": 10.081,
+      "max_ms": 10.094,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/prompts/9999/response": {
+      "n": 1,
+      "mean_ms": 23.457,
+      "p50_ms": 23.457,
+      "p95_ms": 23.457,
+      "p99_ms": 23.457,
+      "max_ms": 23.457,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/rules/": {
+      "n": 6,
+      "mean_ms": 12.778,
+      "p50_ms": 12.383,
+      "p95_ms": 16.909,
+      "p99_ms": 17.964,
+      "max_ms": 18.227,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/rules/": {
+      "n": 13,
+      "mean_ms": 15.531,
+      "p50_ms": 14.665,
+      "p95_ms": 20.951,
+      "p99_ms": 27.025,
+      "max_ms": 28.543,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/rules/1": {
+      "n": 1,
+      "mean_ms": 10.818,
+      "p50_ms": 10.818,
+      "p95_ms": 10.818,
+      "p99_ms": 10.818,
+      "max_ms": 10.818,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/rules/9999": {
+      "n": 1,
+      "mean_ms": 9.07,
+      "p50_ms": 9.07,
+      "p95_ms": 9.07,
+      "p99_ms": 9.07,
+      "max_ms": 9.07,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/rules/1": {
+      "n": 1,
+      "mean_ms": 14.888,
+      "p50_ms": 14.888,
+      "p95_ms": 14.888,
+      "p99_ms": 14.888,
+      "max_ms": 14.888,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/rules/9999": {
+      "n": 1,
+      "mean_ms": 11.585,
+      "p50_ms": 11.585,
+      "p95_ms": 11.585,
+      "p99_ms": 11.585,
+      "max_ms": 11.585,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/rules/1/items": {
+      "n": 1,
+      "mean_ms": 15.424,
+      "p50_ms": 15.424,
+      "p95_ms": 15.424,
+      "p99_ms": 15.424,
+      "max_ms": 15.424,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/rules/9999/items": {
+      "n": 1,
+      "mean_ms": 8.652,
+      "p50_ms": 8.652,
+      "p95_ms": 8.652,
+      "p99_ms": 8.652,
+      "max_ms": 8.652,
+      "errors_5xx": 0
+    },
+    "DELETE /api/v1/rules/1": {
+      "n": 2,
+      "mean_ms": 12.885,
+      "p50_ms": 12.885,
+      "p95_ms": 15.951,
+      "p99_ms": 16.223,
+      "max_ms": 16.291,
+      "errors_5xx": 0
+    },
+    "DELETE /api/v1/rules/9999": {
+      "n": 1,
+      "mean_ms": 8.954,
+      "p50_ms": 8.954,
+      "p95_ms": 8.954,
+      "p99_ms": 8.954,
+      "max_ms": 8.954,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/thresholds/": {
+      "n": 5,
+      "mean_ms": 19.049,
+      "p50_ms": 23.843,
+      "p95_ms": 29.634,
+      "p99_ms": 30.091,
+      "max_ms": 30.205,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/thresholds/": {
+      "n": 7,
+      "mean_ms": 22.582,
+      "p50_ms": 23.761,
+      "p95_ms": 33.902,
+      "p99_ms": 35.504,
+      "max_ms": 35.905,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/thresholds/1": {
+      "n": 1,
+      "mean_ms": 18.333,
+      "p50_ms": 18.333,
+      "p95_ms": 18.333,
+      "p99_ms": 18.333,
+      "max_ms": 18.333,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/thresholds/9999": {
+      "n": 1,
+      "mean_ms": 24.816,
+      "p50_ms": 24.816,
+      "p95_ms": 24.816,
+      "p99_ms": 24.816,
+      "max_ms": 24.816,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/thresholds/1": {
+      "n": 1,
+      "mean_ms": 36.842,
+      "p50_ms": 36.842,
+      "p95_ms": 36.842,
+      "p99_ms": 36.842,
+      "max_ms": 36.842,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/thresholds/9999": {
+      "n": 1,
+      "mean_ms": 14.865,
+      "p50_ms": 14.865,
+      "p95_ms": 14.865,
+      "p99_ms": 14.865,
+      "max_ms": 14.865,
+      "errors_5xx": 0
+    },
+    "DELETE /api/v1/thresholds/1": {
+      "n": 2,
+      "mean_ms": 17.456,
+      "p50_ms": 17.456,
+      "p95_ms": 19.645,
+      "p99_ms": 19.84,
+      "max_ms": 19.888,
+      "errors_5xx": 0
+    },
+    "DELETE /api/v1/thresholds/9999": {
+      "n": 1,
+      "mean_ms": 17.661,
+      "p50_ms": 17.661,
+      "p95_ms": 17.661,
+      "p99_ms": 17.661,
+      "max_ms": 17.661,
+      "errors_5xx": 0
+    },
+    "GET /api/v1/users/": {
+      "n": 2,
+      "mean_ms": 15.258,
+      "p50_ms": 15.258,
+      "p95_ms": 17.117,
+      "p99_ms": 17.282,
+      "max_ms": 17.324,
+      "errors_5xx": 0
+    },
+    "POST /api/v1/users/": {
+      "n": 1,
+      "mean_ms": 479.844,
+      "p50_ms": 479.844,
+      "p95_ms": 479.844,
+      "p99_ms": 479.844,
+      "max_ms": 479.844,
+      "errors_5xx": 0
+    },
+    "PUT /api/v1/users/2": {
+      "n": 2,
+      "mean_ms": 19.586,
+      "p50_ms": 19.586,
+      "p95_ms": 20.851,
+      "p99_ms": 20.963,
+      "max_ms": 20.992,
+      "errors_5xx": 0
+    }
+  }
+}

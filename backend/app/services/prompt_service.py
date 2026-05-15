@@ -153,12 +153,57 @@ class PromptService:
         return db_prompt
     
     @staticmethod
+    def update_prompt(
+        db: Session,
+        prompt_id: int,
+        input_text: Optional[str] = None,
+        temperature: Optional[float] = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        max_new_tokens: Optional[int] = None,
+    ) -> Optional[Prompt]:
+        """Update prompt input and generation params. Clears stale output and metrics if input changes."""
+        db_prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+        if not db_prompt:
+            return None
+
+        if input_text is not None and input_text != db_prompt.input_text:
+            db_prompt.input_text = input_text
+            db_prompt.input_length = len(input_text)
+            # input changed — wipe everything derived from the old input
+            db_prompt.output_text = None
+            db_prompt.output_length = None
+            db_prompt.tokens = None
+            db_prompt.token_probabilities = None
+            db_prompt.logits = None
+            db_prompt.generation_time_ms = None
+            db_prompt.cpu_time_ms = None
+            db_prompt.gpu_time_ms = None
+            db_prompt.generation_trace = None
+            db_prompt.embeddings = None
+            db_prompt.processed_at = None
+            db.query(PromptMetric).filter(PromptMetric.prompt_id == prompt_id).delete()
+
+        if temperature is not None:
+            db_prompt.temperature = temperature
+        if top_k is not None:
+            db_prompt.top_k = top_k
+        if top_p is not None:
+            db_prompt.top_p = top_p
+        if max_new_tokens is not None:
+            db_prompt.max_new_tokens = max_new_tokens
+
+        db.commit()
+        db.refresh(db_prompt)
+        return db_prompt
+
+    @staticmethod
     def delete_prompt(db: Session, prompt_id: int) -> bool:
         """Delete prompt."""
         db_prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
         if not db_prompt:
             return False
-        
+
         db.delete(db_prompt)
         db.commit()
         return True
@@ -258,6 +303,9 @@ class PromptService:
         
         _, median_length, length_variance = calculator.calculate_length_statistics(all_lengths)
         
+        db.query(PromptMetric).filter(PromptMetric.prompt_id == prompt_id).delete()
+        db.flush()
+
         db_metric = PromptMetric(
             prompt_id=prompt_id,
             entropy=entropy,

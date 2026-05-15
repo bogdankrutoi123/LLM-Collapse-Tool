@@ -6,7 +6,7 @@ import time
 from app.db.session import get_db
 from app.schemas.schemas import (
     PromptCreate, PromptResponse, BatchPromptCreate,
-    PromptMetricResponse, PromptResponseUpdate
+    PromptMetricResponse, PromptResponseUpdate, PromptUpdate
 )
 from app.services.prompt_service import PromptService
 from app.services.model_service import ModelVersionService, ModelService
@@ -201,8 +201,6 @@ def generate_prompt_response(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    import torch
-
     prompt = PromptService.get_prompt_by_id(db, prompt_id)
     if not prompt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
@@ -220,46 +218,70 @@ def generate_prompt_response(
         model_id = version.weights_path
 
     if not model_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No model source configured")
-
-    tokenizer, model = _load_model_and_tokenizer(model_id, version.weights_path if version else None)
-
-    gen_kwargs: dict = {"max_new_tokens": max_new_tokens or 64}
-    if temperature is not None:
-        gen_kwargs["temperature"] = temperature
-        gen_kwargs["do_sample"] = temperature > 0
-    if top_k is not None:
-        gen_kwargs["top_k"] = top_k
-    if top_p is not None:
-        gen_kwargs["top_p"] = top_p
-
-    inputs = tokenizer(prompt.input_text, return_tensors="pt")
-    t0 = time.perf_counter()
-    with torch.no_grad():
-        out = model.generate(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            **gen_kwargs,
-            output_scores=True,
-            return_dict_in_generate=True,
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No model source configured for this version. "
+                   "Set weights_path or hf_model_id in model metadata.",
         )
-    gen_ms = (time.perf_counter() - t0) * 1000.0
 
-    input_len  = inputs["input_ids"].shape[1]
-    new_tokens = out.sequences[0][input_len:]
-    output_text = tokenizer.decode(new_tokens, skip_special_tokens=True)
-    token_list  = tokenizer.convert_ids_to_tokens(new_tokens.tolist())
+    try:
+        tokenizer, model = _load_model_and_tokenizer(
+            model_id, version.weights_path if version else None
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Model load failed: {exc.__class__.__name__}: {exc}",
+        ) from exc
 
-    token_probs: dict = {}
-    if hasattr(out, "scores") and out.scores:
+    try:
+        import torch
         import torch.nn.functional as F
-        for i, score in enumerate(out.scores):
-            probs = F.softmax(score[0], dim=-1)
-            top = torch.topk(probs, min(20, probs.shape[0]))
-            token_probs[str(i)] = {
-                tokenizer.convert_ids_to_tokens([idx.item()])[0]: round(p.item(), 6)
-                for idx, p in zip(top.indices, top.values)
-            }
+
+        gen_kwargs: dict = {"max_new_tokens": max_new_tokens or 64}
+        if temperature is not None:
+            gen_kwargs["temperature"] = temperature
+            gen_kwargs["do_sample"] = temperature > 0
+        if top_k is not None:
+            gen_kwargs["top_k"] = top_k
+        if top_p is not None:
+            gen_kwargs["top_p"] = top_p
+
+        inputs = tokenizer(prompt.input_text, return_tensors="pt")
+        t0 = time.perf_counter()
+        with torch.no_grad():
+            out = model.generate(
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **gen_kwargs,
+                output_scores=True,
+                return_dict_in_generate=True,
+            )
+        gen_ms = (time.perf_counter() - t0) * 1000.0
+
+        input_len = inputs["input_ids"].shape[1]
+        new_tokens = out.sequences[0][input_len:]
+        output_text = tokenizer.decode(new_tokens, skip_special_tokens=True)
+        token_list = tokenizer.convert_ids_to_tokens(new_tokens.tolist())
+
+        token_probs: dict = {}
+        if hasattr(out, "scores") and out.scores:
+            for i, score in enumerate(out.scores):
+                probs = F.softmax(score[0], dim=-1)
+                top = torch.topk(probs, min(20, probs.shape[0]))
+                token_probs[str(i)] = {
+                    tokenizer.convert_ids_to_tokens([idx.item()])[0]: round(p.item(), 6)
+                    for idx, p in zip(top.indices, top.values)
+                }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Generation failed: {exc.__class__.__name__}: {exc}",
+        ) from exc
 
     updated = PromptService.update_prompt_with_response(
         db, prompt_id,
@@ -268,9 +290,43 @@ def generate_prompt_response(
         token_probabilities=token_probs,
         generation_time_ms=gen_ms,
     )
+
+    # metrics are best-effort — don't let a failure break the response
     if token_probs:
-        PromptService.calculate_and_store_metrics(db, prompt_id)
+        try:
+            PromptService.calculate_and_store_metrics(db, prompt_id)
+        except Exception:
+            pass
+
     return updated
+
+
+@router.put("/{prompt_id}", response_model=PromptResponse)
+def update_prompt(
+    prompt_id: int,
+    payload: PromptUpdate = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update prompt input text and/or generation parameters. Clears stale output if input changes."""
+    existing = PromptService.get_prompt_by_id(db, prompt_id)
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
+    old_value = _to_dict(existing)
+
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nothing to update")
+
+    if "input_text" in data and (data["input_text"] is None or not data["input_text"].strip()):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="input_text cannot be empty")
+
+    db_prompt = PromptService.update_prompt(db, prompt_id, **data)
+    if not db_prompt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
+
+    AuditService.log(db, current_user.id, "update", "prompt", db_prompt.id, old_value, _to_dict(db_prompt))
+    return db_prompt
 
 
 @router.delete("/{prompt_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -300,21 +356,42 @@ def calculate_prompt_metrics(
     current_user: User = Depends(get_current_user)
 ):
     """Calculate and store metrics for a prompt."""
-    metric = PromptService.calculate_and_store_metrics(
-        db,
-        prompt_id,
-        reference_version_id,
-        baseline_type=baseline_type if baseline_type != "reference" else "reference",
-        baseline_days=baseline_days,
-        baseline_prompt_limit=baseline_prompt_limit
-    )
-    
+    prompt = PromptService.get_prompt_by_id(db, prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
+
+    if not prompt.tokens or not prompt.token_probabilities:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Prompt has no generated output yet. Run generation first.",
+        )
+
+    try:
+        metric = PromptService.calculate_and_store_metrics(
+            db,
+            prompt_id,
+            reference_version_id,
+            baseline_type=baseline_type if baseline_type != "reference" else "reference",
+            baseline_days=baseline_days,
+            baseline_prompt_limit=baseline_prompt_limit,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Metrics calculation failed: {exc.__class__.__name__}: {exc}",
+        ) from exc
+
     if not metric:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not calculate metrics. Ensure prompt has output data."
+            detail="Could not calculate metrics. Ensure prompt has generated output.",
         )
-    AuditService.log(db, current_user.id, "create", "prompt_metric", metric.id, None, _to_dict(metric))
+
+    try:
+        AuditService.log(db, current_user.id, "create", "prompt_metric", metric.id, None, _to_dict(metric))
+    except Exception:
+        pass
+
     return metric
 
 

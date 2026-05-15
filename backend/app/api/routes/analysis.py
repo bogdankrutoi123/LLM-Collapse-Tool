@@ -1,8 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
+from typing import List, Optional
 from app.db.session import get_db
-from app.schemas.schemas import AggregatedMetricResponse, VersionComparisonRequest, VersionComparisonResponse, ReportExportRequest, WikiTextBenchmarkResponse
+from app.schemas.schemas import (
+    AggregatedMetricResponse,
+    VersionComparisonRequest,
+    VersionComparisonResponse,
+    ReportExportRequest,
+    WikiTextBenchmarkResponse,
+    BenchmarkJobCreate,
+    BenchmarkJobResponse,
+)
 from app.services.analytics_service import AnalyticsService
 from app.services.wikitext_service import (
     DEFAULT_DATASET_ID,
@@ -12,6 +21,7 @@ from app.services.wikitext_service import (
 )
 from app.services.model_service import ModelVersionService
 from app.services.model_service import ModelService
+from app.services.benchmark_job_service import BenchmarkJobService
 from app.api.dependencies import get_current_user
 from app.models.database import User
 from app.services.audit_service import AuditService
@@ -127,36 +137,18 @@ async def upload_wikitext_dataset(
     return {"status": "ok", "dataset": dataset}
 
 
-@router.get("/wikitext/benchmark", response_model=WikiTextBenchmarkResponse)
-def get_wikitext_benchmark(
-    model_version_id: int,
-    dataset_id: str = DEFAULT_DATASET_ID,
-    sample_count: int = 8,
-    max_new_tokens: int = 32,
-    temperature: float = 0.7,
-    num_beams: int = 1,
-    max_tokens: int = 8000,
-    top_k: int = 20,
-    rare_percentile: float = 0.1,
-    seed: int | None = None,
+@router.post(
+    "/wikitext/benchmark",
+    response_model=BenchmarkJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def submit_wikitext_benchmark(
+    payload: BenchmarkJobCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    """Benchmark token metrics on model-generated continuations of WikiText-2 prompts."""
-    if sample_count < 1 or sample_count > 200:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sample_count must be between 1 and 200")
-    if max_new_tokens < 1 or max_new_tokens > 512:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="max_new_tokens must be between 1 and 512")
-    if max_tokens < 1000 or max_tokens > 200000:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="max_tokens must be between 1000 and 200000")
-    if num_beams < 1 or num_beams > 10:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="num_beams must be between 1 and 10")
-    if top_k < 5 or top_k > 100:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="top_k must be between 5 and 100")
-    if rare_percentile <= 0 or rare_percentile >= 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="rare_percentile must be between 0 and 1")
-
-    version = ModelVersionService.get_version_by_id(db, model_version_id)
+    """Queue a benchmark job and return immediately. Execution happens in a Celery worker."""
+    version = ModelVersionService.get_version_by_id(db, payload.model_version_id)
     if not version:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model version not found")
 
@@ -164,6 +156,7 @@ def get_wikitext_benchmark(
     if not model:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")
 
+    # pre-validate model source so the caller gets immediate feedback
     local_path = version.weights_path or None
     model_id = None
     if version.model_metadata and isinstance(version.model_metadata, dict):
@@ -174,48 +167,98 @@ def get_wikitext_benchmark(
     if not model_id and not local_path:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No local weights_path or hf_model_id found for this version or model source"
+            detail="No local weights_path or hf_model_id found for this version or model source",
         )
 
-    try:
-        result = calculate_wikitext_benchmark_metrics(
-            model_id=model_id,
-            dataset_id=dataset_id,
-            local_path=local_path,
-            sample_count=sample_count,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            num_beams=num_beams,
-            max_tokens=max_tokens,
-            top_k=top_k,
-            rare_percentile=rare_percentile,
-            seed=seed,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Benchmark failed unexpectedly: {exc.__class__.__name__}: {exc}",
-        ) from exc
-
-    now = datetime.utcnow()
-    snapshot = AggregatedMetric(
-        model_version_id=model_version_id,
-        period_start=now,
-        period_end=now,
-        total_prompts=result["prompts_used"],
-        avg_entropy=result["entropy"],
-        avg_kl_divergence=None,
-        avg_generation_time=None,
-        avg_output_length=None,
-        anomaly_count=0,
-        anomaly_percentage=0.0,
-        metrics_data={"benchmark": result},
+    job = BenchmarkJobService.create_job(
+        db,
+        model_version_id=payload.model_version_id,
+        dataset_id=payload.dataset_id,
+        sample_count=payload.sample_count,
+        max_new_tokens=payload.max_new_tokens,
+        temperature=payload.temperature,
+        num_beams=payload.num_beams,
+        max_tokens=payload.max_tokens,
+        top_k=payload.top_k,
+        rare_percentile=payload.rare_percentile,
+        seed=payload.seed,
+        created_by_id=current_user.id,
     )
-    db.add(snapshot)
-    db.commit()
 
-    return result
+    # try Celery first; fall back to a background thread when the broker is
+    # unreachable so the API stays usable without Redis
+    try:
+        from app.tasks import run_benchmark_job
+        run_benchmark_job.delay(job.id)
+    except Exception:  # noqa: BLE001
+        import threading
+        from app.db.session import SessionLocal
+
+        def _inline_runner(target_job_id: int) -> None:
+            inline_db = SessionLocal()
+            try:
+                BenchmarkJobService.execute_job(inline_db, target_job_id)
+            finally:
+                inline_db.close()
+
+        threading.Thread(target=_inline_runner, args=(job.id,), daemon=True).start()
+
+    AuditService.log(
+        db,
+        current_user.id,
+        "create",
+        "benchmark_job",
+        job.id,
+        None,
+        {"model_version_id": job.model_version_id, "dataset_id": job.dataset_id},
+    )
+    return job
+
+
+@router.get("/wikitext/benchmark/jobs", response_model=List[BenchmarkJobResponse])
+def list_benchmark_jobs(
+    model_version_id: Optional[int] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List benchmark jobs ordered by creation time (newest first)."""
+    return BenchmarkJobService.list_jobs(
+        db,
+        model_version_id=model_version_id,
+        limit=limit,
+    )
+
+
+@router.get("/wikitext/benchmark/jobs/{job_id}", response_model=BenchmarkJobResponse)
+def get_benchmark_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get a single benchmark job by ID. Used by the frontend to poll status/result."""
+    job = BenchmarkJobService.get_job(db, job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Benchmark job not found")
+    return job
+
+
+@router.delete("/wikitext/benchmark/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_benchmark_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove a benchmark job from history. Does not abort a running task."""
+    existing = BenchmarkJobService.get_job(db, job_id)
+    if not BenchmarkJobService.delete_job(db, job_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Benchmark job not found")
+    AuditService.log(
+        db,
+        current_user.id,
+        "delete",
+        "benchmark_job",
+        job_id,
+        {"model_version_id": existing.model_version_id, "status": existing.status.value} if existing else None,
+        None,
+    )

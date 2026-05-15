@@ -120,8 +120,9 @@ def test_bootstrap_admin_rejects_bad_token(client):
     resp = real_client.post("/api/v1/auth/bootstrap-admin", json={
         "email": "root@example.com",
         "username": "root",
+        "full_name": "Root User",
         "password": "verysecurepw1",
-        "bootstrap_token": "wrong-token",
+        "bootstrap_token": "totally-wrong-token",  # 12+ chars: passes schema, fails token check
     })
     assert resp.status_code == 403
 

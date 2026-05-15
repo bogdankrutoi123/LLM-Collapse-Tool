@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiUpload } from "../api/client";
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import InsightCallout from "../components/InsightCallout";
@@ -31,6 +31,29 @@ type WikiTextBenchmark = {
   js_divergence?: number;
 };
 
+type BenchmarkJobStatus = "queued" | "running" | "completed" | "failed";
+
+type BenchmarkJob = {
+  id: number;
+  model_version_id: number;
+  status: BenchmarkJobStatus;
+  error_message: string | null;
+  dataset_id: string;
+  sample_count: number;
+  max_new_tokens: number;
+  temperature: number;
+  num_beams: number;
+  max_tokens: number;
+  top_k: number;
+  rare_percentile: number;
+  seed: number | null;
+  result: WikiTextBenchmark | null;
+  aggregated_metric_id: number | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
 type DatasetOption = {
   id: string;
   label: string;
@@ -58,17 +81,44 @@ type ModelVersion = {
   is_current: boolean;
 };
 
+const POLL_INTERVAL_MS = 3000;
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed";
+}
+
+function statusBadgeStyle(status: BenchmarkJobStatus): React.CSSProperties {
+  switch (status) {
+    case "queued":
+      return { background: "#e0e7ff", color: "#3730a3" };
+    case "running":
+      return { background: "#fef3c7", color: "#92400e" };
+    case "completed":
+      return { background: "#dcfce7", color: "#166534" };
+    case "failed":
+      return { background: "#fee2e2", color: "#991b1b" };
+  }
+}
+
+function formatDuration(start: string | null, end: string | null): string {
+  if (!start) return "—";
+  const startMs = new Date(start).getTime();
+  const endMs = end ? new Date(end).getTime() : Date.now();
+  const diffSec = Math.max(0, Math.round((endMs - startMs) / 1000));
+  if (diffSec < 60) return `${diffSec}s`;
+  const min = Math.floor(diffSec / 60);
+  const sec = diffSec % 60;
+  return `${min}m ${sec}s`;
 }
 
 export default function Benchmark() {
   const [maxTokens, setMaxTokens] = useState("8000");
   const [topK, setTopK] = useState("20");
   const [rarePercentile, setRarePercentile] = useState("0.1");
-  const [result, setResult] = useState<WikiTextBenchmark | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [models, setModels] = useState<Model[]>([]);
   const [versions, setVersions] = useState<ModelVersion[]>([]);
   const [selectedModelId, setSelectedModelId] = useState("");
@@ -81,33 +131,35 @@ export default function Benchmark() {
   const [datasetId, setDatasetId] = useState("wikitext-2");
   const [datasetFile, setDatasetFile] = useState<File | null>(null);
 
-  const handleRun = async () => {
-    setError(null);
-    setIsLoading(true);
+  const [jobs, setJobs] = useState<BenchmarkJob[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const pollTimerRef = useRef<number | null>(null);
+
+  const selectedJob = useMemo(
+    () => jobs.find((job) => job.id === selectedJobId) || null,
+    [jobs, selectedJobId]
+  );
+  const result = selectedJob?.status === "completed" ? selectedJob.result : null;
+
+  const hasActiveJobs = useMemo(
+    () => jobs.some((job) => job.status === "queued" || job.status === "running"),
+    [jobs]
+  );
+
+  const loadJobs = async () => {
     try {
-      if (!selectedVersionId) {
-        throw new Error("Select a model version to benchmark.");
-      }
-      const query = new URLSearchParams({
-        model_version_id: selectedVersionId,
-        dataset_id: datasetId,
-        sample_count: sampleCount,
-        max_new_tokens: maxNewTokens,
-        temperature,
-        num_beams: numBeams,
-        max_tokens: maxTokens,
-        top_k: topK,
-        rare_percentile: rarePercentile
-      });
-      const data = await apiFetch<WikiTextBenchmark>(`/api/v1/analysis/wikitext/benchmark?${query}`);
-      setResult(data);
+      const data = await apiFetch<BenchmarkJob[]>(
+        "/api/v1/analysis/wikitext/benchmark/jobs?limit=50"
+      );
+      setJobs(data);
+      return data;
     } catch (err) {
       setError(getErrorMessage(err));
-    } finally {
-      setIsLoading(false);
+      return [];
     }
   };
 
+  // initial load
   useEffect(() => {
     apiFetch<Model[]>("/api/v1/models/")
       .then(setModels)
@@ -119,7 +171,28 @@ export default function Benchmark() {
         setDatasetId(res.default_dataset_id || "wikitext-2");
       })
       .catch((error: unknown) => setError(getErrorMessage(error)));
+
+    loadJobs();
   }, []);
+
+  // poll only while there are active jobs
+  useEffect(() => {
+    if (!hasActiveJobs) {
+      if (pollTimerRef.current !== null) {
+        window.clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return;
+    }
+    if (pollTimerRef.current !== null) return;
+    pollTimerRef.current = window.setInterval(loadJobs, POLL_INTERVAL_MS);
+    return () => {
+      if (pollTimerRef.current !== null) {
+        window.clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, [hasActiveJobs]);
 
   useEffect(() => {
     if (!selectedModelId) {
@@ -132,13 +205,49 @@ export default function Benchmark() {
       .catch((error: unknown) => setError(getErrorMessage(error)));
   }, [selectedModelId]);
 
+  const handleSubmit = async () => {
+    setError(null);
+    setInfo(null);
+    if (!selectedVersionId) {
+      setError("Select a model version to benchmark.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const job = await apiFetch<BenchmarkJob>(
+        "/api/v1/analysis/wikitext/benchmark",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            model_version_id: Number(selectedVersionId),
+            dataset_id: datasetId,
+            sample_count: Number(sampleCount) || 8,
+            max_new_tokens: Number(maxNewTokens) || 32,
+            temperature: Number(temperature) || 0.7,
+            num_beams: Number(numBeams) || 1,
+            max_tokens: Number(maxTokens) || 8000,
+            top_k: Number(topK) || 20,
+            rare_percentile: Number(rarePercentile) || 0.1,
+          }),
+        }
+      );
+      setInfo(`Benchmark job #${job.id} queued. You can leave this page — results will appear when ready.`);
+      setSelectedJobId(job.id);
+      await loadJobs();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleUploadDataset = async () => {
     if (!datasetFile) {
       setError("Select a dataset file first.");
       return;
     }
     setError(null);
-    setIsLoading(true);
+    setIsUploading(true);
     try {
       const formData = new FormData();
       formData.append("file", datasetFile);
@@ -155,8 +264,25 @@ export default function Benchmark() {
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setIsLoading(false);
+      setIsUploading(false);
     }
+  };
+
+  const handleDeleteJob = async (jobId: number) => {
+    if (!window.confirm(`Remove benchmark job #${jobId} from history?`)) return;
+    try {
+      await apiFetch(`/api/v1/analysis/wikitext/benchmark/jobs/${jobId}`, { method: "DELETE" });
+      if (selectedJobId === jobId) setSelectedJobId(null);
+      await loadJobs();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  const versionLabel = (versionId: number): string => {
+    const v = versions.find((ver) => ver.id === versionId);
+    if (v) return `${v.version} (#${v.id})`;
+    return `#${versionId}`;
   };
 
   const topTokenChartData = result
@@ -171,9 +297,9 @@ export default function Benchmark() {
       <div className="card">
         <h2>Model Benchmark</h2>
         <p className="small">
-          Evaluate a model version against a reference dataset to detect distribution shifts and collapse signals.
-          The model generates continuations from sampled prompts, and the system computes entropy, perplexity,
-          JS divergence, and vocabulary metrics compared to the reference corpus.
+          Submit a benchmark job — it runs in the background on a Celery worker. You can leave this page and come
+          back later: the job history below shows progress and lets you open completed runs.
+          Metrics include entropy, perplexity, JS divergence and vocabulary statistics relative to the reference corpus.
         </p>
         <div className="form-row">
           <select
@@ -193,8 +319,8 @@ export default function Benchmark() {
             accept=".txt,.csv,.parquet,.jsonl,.json"
             onChange={(event) => setDatasetFile(event.target.files?.[0] || null)}
           />
-          <button className="button secondary" onClick={handleUploadDataset} disabled={isLoading}>
-            Upload Dataset
+          <button className="button secondary" onClick={handleUploadDataset} disabled={isUploading}>
+            {isUploading ? "Uploading..." : "Upload Dataset"}
           </button>
         </div>
         <div className="form-row">
@@ -255,16 +381,99 @@ export default function Benchmark() {
             <input className="input" value={numBeams} onChange={(event) => setNumBeams(event.target.value)} placeholder="5" />
           </div>
         </div>
-        <button className="button" onClick={handleRun} disabled={isLoading}>
-          {isLoading ? "Running..." : "Run Benchmark"}
+        <button className="button" onClick={handleSubmit} disabled={isSubmitting}>
+          {isSubmitting ? "Queuing..." : "Submit Benchmark"}
         </button>
         <InsightCallout
           tone="info"
           title="Interpretation"
           text="Higher entropy generally implies richer token distribution, while higher JS divergence against reference may indicate instability or drift."
         />
-        {error && <p className="small">{error}</p>}
+        {error && <p className="small" style={{ color: "#ef4444" }}>{error}</p>}
+        {info && <p className="small" style={{ color: "#166534" }}>{info}</p>}
       </div>
+
+      <div className="card">
+        <div className="topbar">
+          <h3>Benchmark Jobs</h3>
+          <button className="button secondary" onClick={loadJobs}>Refresh</button>
+        </div>
+        {jobs.length === 0 ? (
+          <p className="small">No benchmark jobs yet. Submit one above.</p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Version</th>
+                <th>Dataset</th>
+                <th>Status</th>
+                <th>Duration</th>
+                <th>Created</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.map((job) => {
+                const isSelected = job.id === selectedJobId;
+                return (
+                  <tr key={job.id} style={isSelected ? { background: "#f1f5f9" } : {}}>
+                    <td>{job.id}</td>
+                    <td>{versionLabel(job.model_version_id)}</td>
+                    <td>{job.dataset_id}</td>
+                    <td>
+                      <span
+                        className="badge"
+                        style={{
+                          ...statusBadgeStyle(job.status),
+                          textTransform: "uppercase",
+                          fontSize: 11,
+                        }}
+                      >
+                        {job.status}
+                      </span>
+                    </td>
+                    <td className="small">{formatDuration(job.started_at, job.completed_at)}</td>
+                    <td className="small">{new Date(job.created_at).toLocaleString()}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button
+                          className="button secondary"
+                          onClick={() => setSelectedJobId(job.id)}
+                          disabled={job.status !== "completed" && job.status !== "failed"}
+                          title={
+                            job.status === "queued" || job.status === "running"
+                              ? "Job is still running"
+                              : "View results"
+                          }
+                        >
+                          {isSelected ? "Selected" : "View"}
+                        </button>
+                        <button
+                          className="button secondary"
+                          style={{ color: "#b91c1c", borderColor: "#fecaca" }}
+                          onClick={() => handleDeleteJob(job.id)}
+                          disabled={job.status === "running"}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {selectedJob && selectedJob.status === "failed" && (
+        <InsightCallout
+          tone="warning"
+          title={`Benchmark job #${selectedJob.id} failed`}
+          text={selectedJob.error_message || "Unknown error. Check the worker logs."}
+        />
+      )}
 
       {result && (
         <>
@@ -276,6 +485,11 @@ export default function Benchmark() {
             />
           )}
           <div className="grid grid-3">
+            <div className="card">
+              <div className="small">Job</div>
+              <strong>#{selectedJob?.id}</strong>
+              <div className="small">{selectedJob ? new Date(selectedJob.completed_at || selectedJob.created_at).toLocaleString() : ""}</div>
+            </div>
             <div className="card">
               <div className="small">Dataset</div>
               <strong>{result.dataset}</strong>
