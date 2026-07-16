@@ -49,11 +49,63 @@ git clone <repo>
 cd thesis
 cp backend/.env.example backend/.env   # + заполнить переменные
 
+docker compose build backend
 docker compose up -d
+```
+
+Миграции БД применяются автоматически при старте backend-контейнера. При необходимости их можно выполнить вручную:
+
+```bash
 docker compose exec backend alembic upgrade head
 ```
 
-Фронтенд доступен на `http://localhost:5173`, API — на `http://localhost:8000`.
+Фронтенд — `http://localhost:3000`, API — `http://localhost:8000`.
+
+#### Создание первого admin
+
+1. Сгенерируйте bootstrap-токен:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+2. Добавьте токен в `backend/.env`:
+
+```env
+SECRET_KEY=<...>
+BOOTSTRAP_ADMIN_TOKEN=<токен>
+```
+
+Перезапустите backend после изменения `.env`:
+
+```bash
+docker compose up -d backend
+```
+
+3. Создайте пользователя с правами администратора.
+
+*Скрипт (dev/demo):*
+```bash
+docker compose exec backend python create_admin.py
+```
+Логин: `admin` / `Admin1234!`
+
+*Или через API:*
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/bootstrap-admin \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "username": "admin",
+    "password": "Admin1234!",
+    "full_name": "System Administrator",
+    "bootstrap_token": "<токен>"
+  }'
+```
+
+Эндпоинт `POST /api/v1/auth/bootstrap-admin` работает только пока в БД нет ни одного admin и задан `BOOTSTRAP_ADMIN_TOKEN`. Статус можно проверить через `GET /api/v1/auth/bootstrap-status`.
+
+После входа смените пароль admin на свой.
 
 ### Локальная разработка
 
@@ -67,9 +119,9 @@ pip install -r requirements.txt
 alembic upgrade head
 uvicorn app.main:app --reload
 
-# Frontend
+# Frontend (WSL on /mnt/d/ — use setup-wsl.sh before first npm install)
 cd frontend
-npm install
+wsl bash setup-wsl.sh   # optional, WSL only
 npm run dev
 ```
 

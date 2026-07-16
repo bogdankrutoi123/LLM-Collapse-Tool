@@ -96,8 +96,8 @@ class ModelVersion(Base):
     
     model = relationship("Model", back_populates="versions")
     previous_version = relationship("ModelVersion", remote_side=[id], foreign_keys=[previous_version_id])
-    prompts = relationship("Prompt", back_populates="model_version")
-    metrics = relationship("AggregatedMetric", back_populates="model_version")
+    prompts = relationship("Prompt", back_populates="model_version", passive_deletes=True)
+    metrics = relationship("AggregatedMetric", back_populates="model_version", passive_deletes=True)
 
 
 class Prompt(Base):

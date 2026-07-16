@@ -35,6 +35,32 @@ SUPPORTED_UPLOAD_EXTENSIONS = {".txt", ".csv", ".parquet", ".jsonl", ".json"}
 MAX_REMOTE_MODEL_SIZE_BYTES = 5 * 1024 * 1024 * 1024
 MAX_REMOTE_WEIGHT_SHARDS = 2
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
+def resolve_local_model_path(weights_path: str) -> Optional[Path]:
+    """Resolve a local checkpoint path, tolerating relative paths.
+
+    A relative path is tried against the current working directory first and
+    then against the repo and backend roots, so a value like
+    ``notebooks/models/gen_0`` works regardless of where the server was started.
+    Returns the resolved path if it exists, otherwise None.
+    """
+    raw = weights_path.strip().strip('"').strip("'")
+    if not raw:
+        return None
+
+    candidate = Path(raw).expanduser()
+    candidates = [candidate]
+    if not candidate.is_absolute():
+        candidates += [REPO_ROOT / candidate, BACKEND_ROOT / candidate]
+
+    for path in candidates:
+        if path.exists():
+            return path.resolve()
+    return None
+
 
 def _ensure_dataset() -> Path:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -177,8 +203,8 @@ def _load_model_and_tokenizer(
         raise ValueError("model_id or local_path must be provided")
 
     if local_path:
-        normalized_local_path = Path(local_path).expanduser()
-        if not normalized_local_path.exists():
+        normalized_local_path = resolve_local_model_path(local_path)
+        if normalized_local_path is None:
             raise ValueError(f"Local model path does not exist: {local_path}")
         source = str(normalized_local_path)
 
@@ -306,6 +332,18 @@ def _js_divergence_from_counters(left: Counter, right: Counter) -> float:
     return MetricsCalculator.calculate_js_divergence(left_dist, right_dist)
 
 
+def _kl_divergence_from_counters(left: Counter, right: Counter) -> float:
+    left_probs = _counter_to_probs(left)
+    right_probs = _counter_to_probs(right)
+    if not left_probs or not right_probs:
+        return 0.0
+
+    keys = sorted(set(left_probs.keys()) | set(right_probs.keys()))
+    left_dist = [left_probs.get(k, 0.0) for k in keys]
+    right_dist = [right_probs.get(k, 0.0) for k in keys]
+    return MetricsCalculator.calculate_kl_divergence(left_dist, right_dist)
+
+
 def _format_token_for_display(tokenizer, token: str) -> str:
     """Convert raw tokenizer token (e.g., 'Ġthe', 'Ċ') into readable text markers."""
     try:
@@ -424,6 +462,7 @@ def calculate_wikitext_benchmark_metrics(
             "reference_entropy": 0.0,
             "reference_perplexity": 0.0,
             "js_divergence": 0.0,
+            "kl_divergence": 0.0,
             "rare_token_percentage": 0.0,
             "top_tokens": [],
         }
@@ -442,6 +481,7 @@ def calculate_wikitext_benchmark_metrics(
     reference_entropy = MetricsCalculator.calculate_entropy(ref_probs) if ref_probs else 0.0
     reference_perplexity = float(math.pow(2, reference_entropy)) if reference_entropy > 0 else 0.0
     js_divergence = _js_divergence_from_counters(counter, ref_counter)
+    kl_divergence = _kl_divergence_from_counters(counter, ref_counter)
     avg_sequence_perplexity = float(np.mean(sequence_perplexities)) if sequence_perplexities else 0.0
     std_sequence_perplexity = float(np.std(sequence_perplexities)) if sequence_perplexities else 0.0
 
@@ -477,6 +517,7 @@ def calculate_wikitext_benchmark_metrics(
         "reference_entropy": reference_entropy,
         "reference_perplexity": reference_perplexity,
         "js_divergence": js_divergence,
+        "kl_divergence": kl_divergence,
         "rare_token_percentage": rare_token_percentage,
         "top_tokens": top_tokens,
     }

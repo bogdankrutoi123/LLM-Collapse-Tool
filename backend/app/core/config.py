@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "noreply@llmdetector.com"
+    SMTP_STARTTLS: bool = True
     ALERT_EMAIL_RECIPIENTS: List[str] = []
 
     HUGGINGFACE_HUB_TOKEN: str = ""

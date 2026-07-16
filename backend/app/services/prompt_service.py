@@ -6,7 +6,6 @@ from scipy.stats import entropy as scipy_entropy
 from app.models.database import Prompt, PromptMetric
 from app.schemas.schemas import PromptCreate
 from app.services.metrics_calculator import MetricsCalculator
-from app.services.notification_service import AlertThresholdService
 from app.services.model_service import ModelVersionService
 
 
@@ -328,12 +327,6 @@ class PromptService:
         db.add(db_metric)
         db.commit()
         db.refresh(db_metric)
-
-        fired = AlertThresholdService.evaluate_thresholds_for_metric(db, db_metric)
-        if fired:
-            db_metric.is_anomaly = True
-            db_metric.anomaly_reasons = [n.title for n in fired]
-            db.commit()
 
         return db_metric
     

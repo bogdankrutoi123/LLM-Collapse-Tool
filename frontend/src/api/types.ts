@@ -30,6 +30,7 @@ export type Prompt = {
   id: number;
   model_version_id: number;
   input_text: string;
+  temperature?: number | null;
   output_text?: string;
   output_length?: number;
   generation_time_ms?: number;
@@ -135,8 +136,6 @@ export type AggregatedMetric = {
   avg_kl_divergence?: number | null;
   avg_generation_time?: number | null;
   avg_output_length?: number | null;
-  anomaly_count: number;
-  anomaly_percentage?: number | null;
   metrics_data?: Record<string, unknown> | null;
   calculated_at: string;
 };

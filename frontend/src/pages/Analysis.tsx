@@ -4,7 +4,6 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, 
 import html2canvas from "html2canvas";
 import { AggregatedMetric, Model, ModelVersion, VersionComparison } from "../api/types";
 import MetricComparisonTable from "../components/MetricComparisonTable";
-import InsightCallout from "../components/InsightCallout";
 import { formatMetric, isSignificantChange, prettyMetricName, toNumber, toPercentChange } from "../utils/metrics";
 
 type TrendRow = {
@@ -32,10 +31,12 @@ function parseComparisonRows(comparison: VersionComparison | null): ComparisonRo
     return [];
   }
 
+  const HIDDEN_METRICS = new Set(["anomaly_count", "anomaly_percentage"]);
+
   const rowsFromChanges: ComparisonRow[] = comparison.changes
     .map((item) => {
       const metric = typeof item.metric === "string" ? item.metric : null;
-      if (!metric) {
+      if (!metric || HIDDEN_METRICS.has(metric)) {
         return null;
       }
       return {
@@ -60,7 +61,9 @@ function parseComparisonRows(comparison: VersionComparison | null): ComparisonRo
 
   const version1 = metricsComparison.version_1 ?? {};
   const version2 = metricsComparison.version_2 ?? {};
-  const metricKeys = Array.from(new Set([...Object.keys(version1), ...Object.keys(version2)]));
+  const metricKeys = Array.from(new Set([...Object.keys(version1), ...Object.keys(version2)])).filter(
+    (k) => !HIDDEN_METRICS.has(k)
+  );
 
   return metricKeys.map((metric) => {
     const a = toNumber(version1[metric]);
@@ -243,30 +246,7 @@ export default function Analysis() {
     });
   }, [aggregatedRaw, windowDays]);
 
-  const trendQuality = useMemo(() => {
-    const points = aggregated.length;
-    const missingEntropy = aggregated.filter((row) => row.entropy === null).length;
-    const missingKl = aggregated.filter((row) => row.kl === null).length;
-    const missingJs = aggregated.filter((row) => row.js === null).length;
-    const warnings: string[] = [];
-
-    if (points > 0 && points < 5) {
-      warnings.push("Trend has less than 5 points, interpretation may be noisy.");
-    }
-    if (missingEntropy > 0) {
-      warnings.push(`Entropy is missing in ${missingEntropy} points.`);
-    }
-    if (missingKl === points && points > 0) {
-      warnings.push("No KL divergence data — only available from per-prompt metrics, not from benchmark snapshots.");
-    } else if (missingKl > 0) {
-      warnings.push(`KL divergence is missing in ${missingKl} points.`);
-    }
-    if (missingJs > 0 && missingJs < points) {
-      warnings.push(`JS divergence is missing in ${missingJs} points.`);
-    }
-
-    return warnings;
-  }, [aggregated]);
+  const formatTooltipValue = (value: unknown) => formatMetric(toNumber(value));
 
   return (
     <div className="grid">
@@ -315,11 +295,6 @@ export default function Analysis() {
           <button className="button secondary" onClick={() => exportReport("json")}>Export JSON</button>
           <button className="button secondary" onClick={() => exportReport("csv")}>Export CSV</button>
         </div>
-        <InsightCallout
-          tone="info"
-          title="Interpretation"
-          text="Positive delta means Version B is higher than Version A. Marked significant values exceed 10% relative change or 0.1 absolute delta."
-        />
         {error && <p className="small">{error}</p>}
         {isComparisonLoading && <p className="small">Loading comparison...</p>}
         {!isComparisonLoading && comparisonRows.length > 0 && (
@@ -372,20 +347,13 @@ export default function Analysis() {
         )}
         {!isTrendLoading && aggregated.length > 0 && (
           <>
-            {trendQuality.length > 0 && (
-              <InsightCallout
-                tone="warning"
-                title="Data Quality Warning"
-                text={trendQuality.join(" ")}
-              />
-            )}
             {showEntropy && (
               <ResponsiveContainer width="100%" height={260}>
                 <LineChart data={aggregated}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                   <YAxis label={{ value: "Entropy", angle: -90, position: "insideLeft" }} />
-                  <Tooltip formatter={(value: number | null) => formatMetric(value)} />
+                  <Tooltip formatter={formatTooltipValue} />
                   <Legend />
                   <Line type="monotone" dataKey="entropy" name="Entropy" stroke="#3b82f6" connectNulls={false} />
                 </LineChart>
@@ -397,7 +365,7 @@ export default function Analysis() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                   <YAxis label={{ value: "KL Divergence", angle: -90, position: "insideLeft" }} />
-                  <Tooltip formatter={(value: number | null) => formatMetric(value)} />
+                  <Tooltip formatter={formatTooltipValue} />
                   <Legend />
                   <Bar dataKey="kl" name="KL Divergence" fill="#10b981" />
                 </BarChart>
@@ -409,7 +377,7 @@ export default function Analysis() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                   <YAxis label={{ value: "JS Divergence", angle: -90, position: "insideLeft" }} />
-                  <Tooltip formatter={(value: number | null) => formatMetric(value)} />
+                  <Tooltip formatter={formatTooltipValue} />
                   <Legend />
                   <Bar dataKey="js" name="JS Divergence" fill="#f59e0b" />
                 </BarChart>

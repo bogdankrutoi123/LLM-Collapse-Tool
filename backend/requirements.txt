@@ -16,9 +16,9 @@ numpy==1.26.3
 scipy==1.12.0
 pandas==2.1.4
 pyarrow==15.0.2
-torch >= 2.3
-transformers >= 4.40+
-accelerate >= 0.28+
+# torch is installed separately in Dockerfile (CPU wheels from download.pytorch.org)
+transformers>=4.40.0
+accelerate>=0.28.0
 python-dotenv==1.0.0
 redis==5.0.1
 celery==5.3.6

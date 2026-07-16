@@ -384,11 +384,6 @@ export default function Benchmark() {
         <button className="button" onClick={handleSubmit} disabled={isSubmitting}>
           {isSubmitting ? "Queuing..." : "Submit Benchmark"}
         </button>
-        <InsightCallout
-          tone="info"
-          title="Interpretation"
-          text="Higher entropy generally implies richer token distribution, while higher JS divergence against reference may indicate instability or drift."
-        />
         {error && <p className="small" style={{ color: "#ef4444" }}>{error}</p>}
         {info && <p className="small" style={{ color: "#166534" }}>{info}</p>}
       </div>
@@ -477,13 +472,6 @@ export default function Benchmark() {
 
       {result && (
         <>
-          {result.prompts_used < result.sample_count && (
-            <InsightCallout
-              tone="warning"
-              title="Data Quality Warning"
-              text={`Only ${result.prompts_used} of ${result.sample_count} requested prompts were used. Comparative conclusions may be less stable.`}
-            />
-          )}
           <div className="grid grid-3">
             <div className="card">
               <div className="small">Job</div>

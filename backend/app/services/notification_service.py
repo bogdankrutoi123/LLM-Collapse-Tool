@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import logging
 import threading
-from app.models.database import Notification, AlertThreshold, NotificationStatus, PromptMetric, Prompt, ModelVersion, CollapseEvent, AlertRule, AlertRuleItem
+from app.models.database import Notification, AlertThreshold, NotificationStatus, CollapseEvent, AlertRule, AlertRuleItem, AggregatedMetric
 from app.schemas.schemas import NotificationCreate, NotificationUpdate
 import aiosmtplib
 from email.message import EmailMessage
@@ -11,6 +11,47 @@ from app.core.config import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+def _resolve_benchmark_metric_value(result: Optional[dict], metric_name: str) -> Optional[float]:
+    """Pull a numeric metric out of a completed benchmark result dict."""
+    if not result:
+        return None
+    value = result.get(metric_name)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _benchmark_result_history(
+    db: Session,
+    model_version_id: int,
+    *,
+    limit: Optional[int] = None,
+    since: Optional[datetime] = None,
+) -> List[dict]:
+    """Return benchmark result dicts for a version, most recent first.
+
+    Only benchmark snapshots (``AggregatedMetric`` rows carrying a stored
+    benchmark result) are returned, so persistence checks ignore prompt-level
+    aggregates. The most recent entry is the snapshot just written.
+    """
+    query = db.query(AggregatedMetric).filter(AggregatedMetric.model_version_id == model_version_id)
+    if since is not None:
+        query = query.filter(AggregatedMetric.calculated_at >= since)
+    rows = query.order_by(AggregatedMetric.period_start.desc()).all()
+
+    history: List[dict] = []
+    for row in rows:
+        data = row.metrics_data if isinstance(row.metrics_data, dict) else None
+        bench = data.get("benchmark") if data else None
+        if isinstance(bench, dict) and bench:
+            history.append(bench)
+            if limit is not None and len(history) >= limit:
+                break
+    return history
 
 
 class NotificationService:
@@ -49,6 +90,8 @@ class NotificationService:
         recipients = notification.recipients
         if not recipients and settings.ALERT_EMAIL_RECIPIENTS:
             recipients = settings.ALERT_EMAIL_RECIPIENTS
+        if not recipients and settings.SMTP_USER:
+            recipients = [settings.SMTP_USER]
 
         db_notification = Notification(
             model_version_id=notification.model_version_id,
@@ -140,16 +183,24 @@ class NotificationService:
             """
             
             message.set_content(body)
-            
+
+            # only authenticate when a password is configured — local relays and
+            # capture servers accept mail without AUTH
+            auth_kwargs = {}
+            if settings.SMTP_PASSWORD:
+                auth_kwargs = {
+                    "username": settings.SMTP_USER.strip(),
+                    "password": settings.SMTP_PASSWORD.replace(" ", ""),
+                }
+
             await aiosmtplib.send(
                 message,
                 hostname=settings.SMTP_HOST,
                 port=settings.SMTP_PORT,
-                username=settings.SMTP_USER,
-                password=settings.SMTP_PASSWORD,
                 use_tls=settings.SMTP_PORT == 465,
-                start_tls=settings.SMTP_PORT != 465,
-                timeout=15
+                start_tls=settings.SMTP_STARTTLS and settings.SMTP_PORT != 465,
+                timeout=15,
+                **auth_kwargs,
             )
             
             return True
@@ -265,17 +316,14 @@ class AlertThresholdService:
         return True
 
     @staticmethod
-    def evaluate_thresholds_for_metric(
+    def evaluate_thresholds_for_benchmark(
         db: Session,
-        prompt_metric: PromptMetric
+        model_version_id: int,
+        result: dict,
     ) -> List[Notification]:
-        """Evaluate active thresholds for a metric and emit notifications/events."""
+        """Evaluate active thresholds against a completed benchmark result."""
         notifications: List[Notification] = []
-        if not prompt_metric:
-            return notifications
-
-        prompt = db.query(Prompt).filter(Prompt.id == prompt_metric.prompt_id).first()
-        if not prompt:
+        if not result or model_version_id is None:
             return notifications
 
         thresholds = AlertThresholdService.get_active_thresholds(db)
@@ -284,75 +332,32 @@ class AlertThresholdService:
 
         from app.services.metrics_calculator import MetricsCalculator
 
-        def resolve_metric_value(m: PromptMetric, p: Prompt, metric_name: str) -> Optional[float]:
-            if metric_name in {
-                "entropy",
-                "kl_divergence",
-                "js_divergence",
-                "wasserstein_distance",
-                "ngram_drift",
-                "embedding_drift",
-            }:
-                return getattr(m, metric_name, None)
-            if metric_name == "output_length":
-                return p.output_length
-            if metric_name == "generation_time_ms":
-                return p.generation_time_ms
-            if metric_name == "cpu_time_ms":
-                return p.cpu_time_ms
-            if metric_name == "gpu_time_ms":
-                return p.gpu_time_ms
-            return None
-
         now = datetime.utcnow()
 
         def threshold_is_met(threshold: AlertThreshold) -> tuple[bool, Optional[float]]:
-            value = resolve_metric_value(prompt_metric, prompt, threshold.metric_name)
+            value = _resolve_benchmark_metric_value(result, threshold.metric_name)
             if value is None:
                 return False, None
-
             if not MetricsCalculator.detect_anomaly(value, threshold.threshold_value, threshold.comparison_operator):
                 return False, value
 
             if threshold.persistence_count and threshold.persistence_count > 1:
-                recent_metrics = db.query(PromptMetric).join(Prompt).filter(
-                    Prompt.model_version_id == prompt.model_version_id,
-                    PromptMetric.id <= prompt_metric.id,
-                ).order_by(PromptMetric.id.desc()).limit(threshold.persistence_count).all()
-                if len(recent_metrics) < threshold.persistence_count:
+                recent = _benchmark_result_history(db, model_version_id, limit=threshold.persistence_count)
+                if len(recent) < threshold.persistence_count:
                     return False, value
-
-                for metric_row in recent_metrics:
-                    metric_prompt = db.query(Prompt).filter(Prompt.id == metric_row.prompt_id).first()
-                    if not metric_prompt:
-                        return False, value
-                    metric_value = resolve_metric_value(metric_row, metric_prompt, threshold.metric_name)
-                    if metric_value is None or not MetricsCalculator.detect_anomaly(
-                        metric_value,
-                        threshold.threshold_value,
-                        threshold.comparison_operator,
-                    ):
+                for bench in recent:
+                    v = _resolve_benchmark_metric_value(bench, threshold.metric_name)
+                    if v is None or not MetricsCalculator.detect_anomaly(v, threshold.threshold_value, threshold.comparison_operator):
                         return False, value
 
             if threshold.persistence_window_minutes and threshold.persistence_window_minutes > 0:
-                window_start = now - timedelta(minutes=threshold.persistence_window_minutes)
-                window_metrics = db.query(PromptMetric).join(Prompt).filter(
-                    Prompt.model_version_id == prompt.model_version_id,
-                    PromptMetric.calculated_at >= window_start,
-                ).all()
-                if not window_metrics:
+                since = now - timedelta(minutes=threshold.persistence_window_minutes)
+                window = _benchmark_result_history(db, model_version_id, since=since)
+                if not window:
                     return False, value
-
-                for metric_row in window_metrics:
-                    metric_prompt = db.query(Prompt).filter(Prompt.id == metric_row.prompt_id).first()
-                    if not metric_prompt:
-                        return False, value
-                    metric_value = resolve_metric_value(metric_row, metric_prompt, threshold.metric_name)
-                    if metric_value is None or not MetricsCalculator.detect_anomaly(
-                        metric_value,
-                        threshold.threshold_value,
-                        threshold.comparison_operator,
-                    ):
+                for bench in window:
+                    v = _resolve_benchmark_metric_value(bench, threshold.metric_name)
+                    if v is None or not MetricsCalculator.detect_anomaly(v, threshold.threshold_value, threshold.comparison_operator):
                         return False, value
 
             return True, value
@@ -365,10 +370,10 @@ class AlertThresholdService:
             return NotificationService.create_notification(
                 db,
                 notification=NotificationCreate(
-                    model_version_id=prompt.model_version_id,
-                    prompt_id=prompt.id,
+                    model_version_id=model_version_id,
+                    prompt_id=None,
                     alert_threshold_id=source_threshold.id,
-                    title=f"Threshold exceeded: {source_threshold.name}",
+                    title=f"Benchmark threshold exceeded: {source_threshold.name}",
                     message="Triggered metrics: " + "; ".join(metric_parts),
                     severity="warning",
                     recipients=None,
@@ -399,10 +404,10 @@ class AlertThresholdService:
             notifications.append(create_threshold_notification(triggered, threshold))
 
             db.add(CollapseEvent(
-                model_version_id=prompt.model_version_id,
-                prompt_id=prompt.id,
+                model_version_id=model_version_id,
+                prompt_id=None,
                 triggered_metrics=triggered,
-                baseline_metadata=getattr(prompt_metric, "baseline_metadata", None),
+                baseline_metadata={"source": "benchmark"},
                 persistence_metadata={
                     "persistence_count": threshold.persistence_count,
                     "persistence_window_minutes": threshold.persistence_window_minutes,
@@ -444,10 +449,10 @@ class AlertThresholdService:
             notifications.append(create_threshold_notification(triggered, group[0]))
 
             db.add(CollapseEvent(
-                model_version_id=prompt.model_version_id,
-                prompt_id=prompt.id,
+                model_version_id=model_version_id,
+                prompt_id=None,
                 triggered_metrics=triggered,
-                baseline_metadata=getattr(prompt_metric, "baseline_metadata", None),
+                baseline_metadata={"source": "benchmark"},
                 persistence_metadata={
                     "persistence_count": None,
                     "persistence_window_minutes": None,
@@ -457,20 +462,18 @@ class AlertThresholdService:
             ))
             db.commit()
 
-        notifications.extend(AlertThresholdService.evaluate_rules_for_metric(db, prompt_metric))
+        notifications.extend(AlertThresholdService.evaluate_rules_for_benchmark(db, model_version_id, result))
         return notifications
 
     @staticmethod
-    def evaluate_rules_for_metric(
+    def evaluate_rules_for_benchmark(
         db: Session,
-        prompt_metric: PromptMetric
+        model_version_id: int,
+        result: dict,
     ) -> List[Notification]:
+        """Evaluate active multi-signal rules against a completed benchmark result."""
         notifications: List[Notification] = []
-        if not prompt_metric:
-            return notifications
-
-        prompt = db.query(Prompt).filter(Prompt.id == prompt_metric.prompt_id).first()
-        if not prompt:
+        if not result or model_version_id is None:
             return notifications
 
         rules = db.query(AlertRule).filter(AlertRule.is_active == True).all()
@@ -479,57 +482,25 @@ class AlertThresholdService:
 
         from app.services.metrics_calculator import MetricsCalculator
 
-        def resolve_metric_value(m: PromptMetric, p: Prompt, metric_name: str) -> Optional[float]:
-            if metric_name in {
-                "entropy",
-                "kl_divergence",
-                "js_divergence",
-                "wasserstein_distance",
-                "ngram_drift",
-                "embedding_drift"
-            }:
-                return getattr(m, metric_name, None)
-            if metric_name == "output_length":
-                return p.output_length
-            if metric_name == "generation_time_ms":
-                return p.generation_time_ms
-            if metric_name == "cpu_time_ms":
-                return p.cpu_time_ms
-            if metric_name == "gpu_time_ms":
-                return p.gpu_time_ms
-            return None
+        now = datetime.utcnow()
 
         def item_persistence_ok(item: AlertRuleItem) -> bool:
             if item.persistence_count and item.persistence_count > 1:
-                recent_metrics = db.query(PromptMetric).join(Prompt).filter(
-                    Prompt.model_version_id == prompt.model_version_id,
-                    PromptMetric.id <= prompt_metric.id
-                ).order_by(PromptMetric.id.desc()).limit(item.persistence_count).all()
-
-                if len(recent_metrics) < item.persistence_count:
+                recent = _benchmark_result_history(db, model_version_id, limit=item.persistence_count)
+                if len(recent) < item.persistence_count:
                     return False
-
-                for m in recent_metrics:
-                    p = db.query(Prompt).filter(Prompt.id == m.prompt_id).first()
-                    if not p:
-                        return False
-                    v = resolve_metric_value(m, p, item.metric_name)
+                for bench in recent:
+                    v = _resolve_benchmark_metric_value(bench, item.metric_name)
                     if v is None or not MetricsCalculator.detect_anomaly(v, item.threshold_value, item.comparison_operator):
                         return False
 
             if item.persistence_window_minutes and item.persistence_window_minutes > 0:
-                window_start = datetime.utcnow() - timedelta(minutes=item.persistence_window_minutes)
-                window_metrics = db.query(PromptMetric).join(Prompt).filter(
-                    Prompt.model_version_id == prompt.model_version_id,
-                    PromptMetric.calculated_at >= window_start
-                ).all()
-                if not window_metrics:
+                since = now - timedelta(minutes=item.persistence_window_minutes)
+                window = _benchmark_result_history(db, model_version_id, since=since)
+                if not window:
                     return False
-                for m in window_metrics:
-                    p = db.query(Prompt).filter(Prompt.id == m.prompt_id).first()
-                    if not p:
-                        return False
-                    v = resolve_metric_value(m, p, item.metric_name)
+                for bench in window:
+                    v = _resolve_benchmark_metric_value(bench, item.metric_name)
                     if v is None or not MetricsCalculator.detect_anomaly(v, item.threshold_value, item.comparison_operator):
                         return False
 
@@ -543,7 +514,7 @@ class AlertThresholdService:
             results = []
             triggered = []
             for item in items:
-                value = resolve_metric_value(prompt_metric, prompt, item.metric_name)
+                value = _resolve_benchmark_metric_value(result, item.metric_name)
                 current_met = value is not None and MetricsCalculator.detect_anomaly(
                     value, item.threshold_value, item.comparison_operator
                 )
@@ -555,7 +526,7 @@ class AlertThresholdService:
                         "operator": item.comparison_operator,
                         "value": value,
                         "rule_id": rule.id,
-                        "rule_item_id": item.id
+                        "rule_item_id": item.id,
                     })
                 else:
                     results.append(False)
@@ -567,26 +538,26 @@ class AlertThresholdService:
             notification = NotificationService.create_notification(
                 db,
                 notification=NotificationCreate(
-                    model_version_id=prompt.model_version_id,
-                    prompt_id=prompt.id,
+                    model_version_id=model_version_id,
+                    prompt_id=None,
                     alert_threshold_id=None,
-                    title=f"Rule triggered: {rule.name}",
-                    message=f"Multi-signal rule '{rule.name}' satisfied.",
+                    title=f"Benchmark rule triggered: {rule.name}",
+                    message=f"Multi-signal rule '{rule.name}' satisfied on benchmark.",
                     severity="warning",
-                    recipients=None
-                )
+                    recipients=None,
+                ),
             )
             notifications.append(notification)
 
             collapse = CollapseEvent(
-                model_version_id=prompt.model_version_id,
-                prompt_id=prompt.id,
+                model_version_id=model_version_id,
+                prompt_id=None,
                 triggered_metrics=triggered,
-                baseline_metadata=getattr(prompt_metric, "baseline_metadata", None),
+                baseline_metadata={"source": "benchmark"},
                 persistence_metadata={
                     "rule_id": rule.id,
-                    "operator": rule.operator
-                }
+                    "operator": rule.operator,
+                },
             )
             db.add(collapse)
             db.commit()

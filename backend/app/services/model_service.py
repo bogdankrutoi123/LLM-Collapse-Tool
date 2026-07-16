@@ -208,8 +208,10 @@ class ModelVersionService:
         use_local = bool(weights_path and weights_path.strip())
         token = None if use_local else hf_token
         if use_local:
-            path = Path(source).expanduser()
-            if not path.exists():
+            from app.services.wikitext_service import resolve_local_model_path
+
+            path = resolve_local_model_path(weights_path)
+            if path is None:
                 raise ValueError(f"Local weights_path does not exist: {weights_path}")
             source = str(path)
 

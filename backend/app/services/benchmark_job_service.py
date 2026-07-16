@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import List, Optional
 
@@ -12,7 +13,10 @@ from app.models.database import (
     Model,
     ModelVersion,
 )
+from app.services.notification_service import AlertThresholdService
 from app.services.wikitext_service import calculate_wikitext_benchmark_metrics
+
+logger = logging.getLogger(__name__)
 
 
 class BenchmarkJobService:
@@ -136,7 +140,7 @@ class BenchmarkJobService:
                 period_end=now,
                 total_prompts=result.get("prompts_used", 0),
                 avg_entropy=result.get("entropy"),
-                avg_kl_divergence=None,
+                avg_kl_divergence=result.get("kl_divergence"),
                 avg_generation_time=None,
                 avg_output_length=None,
                 anomaly_count=0,
@@ -151,6 +155,14 @@ class BenchmarkJobService:
             job.status = BenchmarkJobStatus.COMPLETED
             job.completed_at = datetime.utcnow()
             db.commit()
+
+            # evaluate alert thresholds/rules against the benchmark result
+            try:
+                AlertThresholdService.evaluate_thresholds_for_benchmark(
+                    db, job.model_version_id, result
+                )
+            except Exception as alert_exc:  # noqa: BLE001
+                logger.warning("Benchmark alert evaluation failed: %s", alert_exc)
         except Exception as exc:  # noqa: BLE001
             db.rollback()
             # re-fetch in a clean transaction so we can persist the failure

@@ -35,11 +35,12 @@ services:
     networks:
       - llm_network
 
-  # Backend API
+  # Backend API — единственный сервис, который собирает thesis-backend:latest
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: thesis-backend:latest
     env_file:
       - ./backend/.env
     environment:
@@ -49,6 +50,7 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/2
     volumes:
       - ./backend:/app
+      - ./notebooks:/app/notebooks:ro
       - backend_uploads:/app/uploads
       - backend_exports:/app/exports
     ports:
@@ -66,11 +68,27 @@ services:
     networks:
       - llm_network
 
+  # Local SMTP capture server (dev/demo). Reuses the backend image built above.
+  mailcatcher:
+    image: thesis-backend:latest
+    pull_policy: never
+    command: python mail_catcher.py
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - llm_network
+
   # Celery Worker (optional for async tasks)
   celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: thesis-backend:latest
+    pull_policy: never
     command: celery -A app.tasks worker --loglevel=info
     env_file:
       - ./backend/.env
@@ -81,10 +99,14 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/2
     volumes:
       - ./backend:/app
+      - ./notebooks:/app/notebooks:ro
     depends_on:
-      - db
-      - redis
-      - backend
+      backend:
+        condition: service_started
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - llm_network
 

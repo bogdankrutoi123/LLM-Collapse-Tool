@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { loginUser } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed";
@@ -36,7 +36,6 @@ export default function Login() {
         <label className="small">Password</label>
         <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         <button className="button" type="submit">Login</button>
-        <p className="small">No account? <Link to="/register">Register</Link></p>
       </form>
     </div>
   );
