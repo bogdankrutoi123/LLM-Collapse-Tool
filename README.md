@@ -84,13 +84,13 @@ docker compose up -d backend
 
 3. Создайте пользователя с правами администратора.
 
-*Скрипт (dev/demo):*
+Скрипт (dev/demo):
 ```bash
 docker compose exec backend python create_admin.py
 ```
 Логин: `admin` / `Admin1234!`
 
-*Или через API:*
+Или через API:
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/bootstrap-admin \
   -H "Content-Type: application/json" \
@@ -119,9 +119,9 @@ pip install -r requirements.txt
 alembic upgrade head
 uvicorn app.main:app --reload
 
-# Frontend (WSL on /mnt/d/ — use setup-wsl.sh before first npm install)
+# Frontend
 cd frontend
-wsl bash setup-wsl.sh   # optional, WSL only
+wsl bash setup-wsl.sh   # опционально
 npm run dev
 ```
 
